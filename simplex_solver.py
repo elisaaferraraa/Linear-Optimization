@@ -89,7 +89,15 @@ def dantzig_rule(tableau):
         int: Index of the entering variable.
     """
     ### YOUR CODE HERE
-    pass
+    # Choose the non-basic variable with the most negative reduced cost 
+    # (i.e., the most negative value in the last row of the tableau)
+    reduced_costs = tableau[-1, :-1]
+    entering_var = np.argmin(reduced_costs) #In case of multiple occurrences of the minimum values, the indices corresponding to the first occurrence are returned.
+    if reduced_costs[entering_var] >= 0:
+        return None
+    return entering_var
+
+
 
 def bland_rule(tableau, n):
     """Bland's rule for selecting entering variable.
@@ -100,7 +108,14 @@ def bland_rule(tableau, n):
         int: Index of the entering variable.
     """
     ### YOUR CODE HERE
-    pass
+    # Always choose the variable with the smallest index among those eligible. 
+    # This prevents cycling.
+    reduced_costs = tableau[-1, :-1]
+    entering_var_eligible = np.where(reduced_costs < 0)[0]
+    if len(entering_var_eligible) == 0:
+        return None
+    entering_var = entering_var_eligible[0]
+    return entering_var
 
 def find_pivot(tableau, m, n, pivoting_rule):
     """Find the pivot element in the tableau.
@@ -116,7 +131,27 @@ def find_pivot(tableau, m, n, pivoting_rule):
         Exception: If the problem is unbounded.
     """
     ### YOUR CODE HERE
-    pass
+    if pivoting_rule == 'dantzig':
+        col = dantzig_rule(tableau)
+    elif pivoting_rule == 'bland':
+        col = bland_rule(tableau, n)
+    else:
+        raise ValueError("Invalid pivoting rule. Use 'dantzig' or 'bland'.")
+    if col is None:
+        return None, None
+    #TOCHECK here below
+    # ratios = tableau[:-1, -1] / tableau[:-1, col]
+    column = tableau[:-1, col]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ratios = np.where(column > 1e-8, tableau[:-1, -1] / column, np.inf)
+
+    ratios[ratios <= 0] = np.inf  # Ignore non-positive ratios
+    row = np.argmin(ratios)
+    if ratios[row] == np.inf:
+        raise Exception("Unbounded problem.")
+    return row, col
+
+
 
 def pivot(tableau, basis, row, col):
     """Perform pivot operation on tableau at specified row and column.
@@ -129,7 +164,13 @@ def pivot(tableau, basis, row, col):
         tuple: Updated tableau (np.ndarray) and basis (list).
     """
     ### YOUR CODE HERE
-    pass
+    pivot_element = tableau[row, col]
+    tableau[row, :] /= pivot_element 
+    for i in range(len(tableau)):
+        if i != row:
+            tableau[i, :] -= tableau[i, col] * tableau[row, :]
+    basis[row] = col
+    return (tableau, basis)
 
 def build_phase_two_tableau(tableau, basis, c, n):
     """Build the tableau for phase two of the simplex method.
@@ -142,7 +183,14 @@ def build_phase_two_tableau(tableau, basis, c, n):
         np.ndarray: The tableau for phase two.
     """
     ### YOUR CODE HERE
-    pass
+    tableau_phase_two = tableau.copy()
+    tableau_phase_two[-1, :] = 0
+    tableau_phase_two[-1, :n] = -c
+    for i, var in enumerate(basis):
+        tableau_phase_two[-1, :] += c[var] * tableau_phase_two[i, :]
+    return tableau_phase_two
+
+
 
 def solve_phase_two(tableau, basis, m, n, pivoting_rule):
     """Solve the phase two of the simplex method.
@@ -156,7 +204,13 @@ def solve_phase_two(tableau, basis, m, n, pivoting_rule):
         tuple: Final tableau (np.ndarray) and basis (list).
     """
     ### YOUR CODE HERE
-    pass
+    
+    while True:
+        row, col = find_pivot(tableau, m, n, pivoting_rule)
+        if row is None:
+            break
+        tableau, basis = pivot(tableau, basis, row, col)
+    return tableau, basis
 
 def get_solution(tableau, basis, n):
     """Extract the solution to the standard form LP from the tableau.
@@ -168,7 +222,12 @@ def get_solution(tableau, basis, n):
         tuple: Solution vector (np.ndarray), optimal value (float), and optimal basis (list).
     """
     ### YOUR CODE HERE
-    pass
+    solution = np.zeros(n)
+    for i, var in enumerate(basis):
+        if var < n:
+            solution[var] = tableau[i, -1]
+    optimal_value = -tableau[-1, -1]
+    return solution, optimal_value, basis
 
 def solve_simplex(A, b, c, pivoting_rule):
     """Solve the linear programming problem using the simplex method.
